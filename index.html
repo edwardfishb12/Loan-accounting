@@ -6,41 +6,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>房貸管家 Pro</title>
     
-    <!-- 行動裝置優化 -->
+    <!-- iOS 原生 App 體驗設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="房貸管家">
     <meta name="theme-color" content="#4f46e5">
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3596/3596091.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="importmap">
-    {
-      "imports": {
-        "react/": "https://esm.sh/react@^19.2.3/",
-        "react": "https://esm.sh/react@^19.2.3",
-        "recharts": "https://esm.sh/recharts@^3.6.0",
-        "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-      }
-    }
-    </script>
+    
     <style>
-      /* 防止手機橡皮筋回彈效果與優化觸控 */
       body {
         overscroll-behavior-y: contain;
         -webkit-tap-highlight-color: transparent;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+        user-select: none;
       }
       .safe-pb {
         padding-bottom: env(safe-area-inset-bottom);
       }
+      input, select, textarea {
+        user-select: auto;
+      }
+      ::-webkit-scrollbar {
+        width: 0px;
+        background: transparent;
+      }
     </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
 </head>
 <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(reg => {
+            console.log('SW registered!', reg);
+          }).catch(err => {
+            console.log('SW registration failed: ', err);
+          });
+        });
+      }
+    </script>
 </body>
 </html>
