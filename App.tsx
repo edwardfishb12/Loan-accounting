@@ -13,10 +13,11 @@ import ReportsView from './components/ReportsView';
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'reports'>('overview');
   const [data, setData] = useState<AppData>(() => {
-    const saved = localStorage.getItem('loan_tracker_data');
+    // 優先讀取暫存
+    const saved = localStorage.getItem('loan_tracker_data_v2'); // 使用新版本號確保更新初始值
     if (saved) return JSON.parse(saved);
     
-    // 定義貸款帳戶
+    // 定義貸款帳戶 (根據使用者提供數據)
     const loans: LoanAccount[] = [
       {
         id: 'loan-1',
@@ -74,40 +75,52 @@ const App: React.FC = () => {
 
     // 生成歷史還款紀錄
     const payments: PaymentRecord[] = [];
-    const months = ['07', '08', '09', '10', '11', '12', '01', '02'];
+    const months2024 = ['07', '08', '09', '10', '11', '12'];
+    const months2025 = ['01', '02'];
     
-    months.forEach(m => {
-      const year = (m === '01' || m === '02') ? '2025' : '2024';
-      const dateStr = `${year}-${m}-10`;
+    // 生成函數
+    const addMonthlyPayments = (year: string, month: string) => {
+      const dateStr = `${year}-${month}-10`;
 
-      // 一般房貸
+      // 一般房貸: $6,919
       payments.push({
-        id: `h-l1-${year}${m}`,
+        id: `pay-l1-${year}-${month}`,
         loanId: 'loan-1',
         amount: 6919,
         date: dateStr,
-        note: '每月固定還款'
+        note: '每月本息還款'
       });
 
-      // 新青安
+      // 新青安: $14,792
       payments.push({
-        id: `h-l2-${year}${m}`,
+        id: `pay-l2-${year}-${month}`,
         loanId: 'loan-2',
         amount: 14792,
         date: dateStr,
-        note: '每月固定還款'
+        note: '每月本息還款'
       });
 
-      // 170 信貸 (從 8 月開始)
-      if (m !== '07') {
+      // 170 信貸: $21,596 (7/26放款, 8/10開始首期)
+      if (!(year === '2024' && month === '07')) {
         payments.push({
-          id: `h-l3-${year}${m}`,
+          id: `pay-l3-${year}-${month}`,
           loanId: 'loan-3',
           amount: 21596,
           date: dateStr,
-          note: '每月固定還款'
+          note: '信貸固定還款'
         });
       }
+    };
+
+    months2024.forEach(m => addMonthlyPayments('2024', m));
+    months2025.forEach(m => addMonthlyPayments('2025', m));
+
+    // 計算當前餘額 (根據初始金額減去已繳紀錄)
+    loans.forEach(loan => {
+      const paidForThisLoan = payments
+        .filter(p => p.loanId === loan.id)
+        .reduce((sum, p) => sum + p.amount, 0);
+      loan.currentBalance = Math.max(0, loan.originalAmount - paidForThisLoan);
     });
 
     // 依時間倒序排列
@@ -128,7 +141,7 @@ const App: React.FC = () => {
   const [editLoan, setEditLoan] = useState<LoanAccount | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('loan_tracker_data', JSON.stringify(data));
+    localStorage.setItem('loan_tracker_data_v2', JSON.stringify(data));
   }, [data]);
 
   const totalBalance = useMemo(() => 
@@ -220,8 +233,8 @@ const App: React.FC = () => {
               <i className="fas fa-wallet"></i>
             </div>
             <div>
-              <h1 className="text-xl font-black text-slate-800 leading-tight">房貸與信貸追蹤</h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Financial Tracker Pro</p>
+              <h1 className="text-xl font-black text-slate-800 leading-tight">房貸管家 Pro</h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Personal Finance Tracker</p>
             </div>
           </div>
 
@@ -272,7 +285,7 @@ const App: React.FC = () => {
                 <h2 className="text-3xl font-black text-emerald-600">NT$ {totalPaid.toLocaleString()}</h2>
                 <div className="mt-6 flex items-center text-xs font-bold text-slate-400">
                    <i className="fas fa-arrow-trend-up mr-2 text-emerald-500"></i>
-                   進度已完成 {((totalPaid / (totalPaid + totalBalance)) * 100).toFixed(1)}%
+                   已還款進度 {((totalPaid / (totalPaid + totalBalance)) * 100).toFixed(1)}%
                 </div>
               </div>
 
@@ -330,7 +343,7 @@ const App: React.FC = () => {
 
               <div className="space-y-6">
                 <h3 className="text-lg font-black text-slate-800 flex items-center">
-                  <i className="fas fa-clock-rotate-left mr-2 text-indigo-500"></i> 最近動態
+                  <i className="fas fa-clock-rotate-left mr-2 text-indigo-500"></i> 最近還款
                 </h3>
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
                   {data.payments.length === 0 ? (
@@ -358,7 +371,7 @@ const App: React.FC = () => {
                                   onClick={() => deletePayment(payment.id)}
                                   className="text-[10px] text-red-400 font-bold hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
-                                  刪除紀錄
+                                  刪除
                                 </button>
                               </div>
                             </div>
@@ -386,7 +399,7 @@ const App: React.FC = () => {
             <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
               <div>
                 <h3 className="text-xl font-black">記錄還款</h3>
-                <p className="text-indigo-200 text-xs">輸入今天的繳費細節</p>
+                <p className="text-indigo-200 text-xs">輸入單次繳費金額</p>
               </div>
               <button onClick={() => setShowPaymentModal(false)} className="bg-white/10 hover:bg-white/20 w-10 h-10 rounded-full flex items-center justify-center transition-colors">
                 <i className="fas fa-times"></i>
@@ -394,22 +407,22 @@ const App: React.FC = () => {
             </div>
             <div className="p-8 space-y-6 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-8">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">還款項目</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">選擇貸款</label>
                 <select 
                   value={selectedLoanId}
                   onChange={(e) => setSelectedLoanId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all appearance-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold focus:ring-2 focus:ring-indigo-500 outline-none appearance-none"
                 >
-                  <option value="">請選擇貸款帳戶</option>
+                  <option value="">請選擇</option>
                   {data.loans.map(l => (
-                    <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
+                    <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">還款日期</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">日期</label>
                   <input 
                     type="date"
                     value={paymentDate}
@@ -418,10 +431,9 @@ const App: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">繳費金額</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">金額</label>
                   <input 
                     type="number"
-                    placeholder="0"
                     value={paymentAmount || ''}
                     onChange={(e) => setPaymentAmount(Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -430,7 +442,7 @@ const App: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">備註 (例如: 本金利息/額外還款)</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">備註</label>
                 <input 
                   type="text"
                   placeholder="備註資訊..."
@@ -442,23 +454,23 @@ const App: React.FC = () => {
 
               <button 
                 onClick={handleAddPayment}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-2xl mt-4 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center justify-center"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-2xl mt-4 transition-all shadow-xl shadow-indigo-100 active:scale-95"
               >
-                儲存還款紀錄
+                儲存還款
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Settings/Edit Modal */}
+      {/* Settings Modal */}
       {showSettingsModal && editLoan && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-white rounded-t-[2rem] md:rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0 md:zoom-in-95 duration-200">
             <div className="p-8 bg-slate-800 text-white flex justify-between items-center">
               <div>
-                <h3 className="text-xl font-black">帳戶設定</h3>
-                <p className="text-slate-400 text-xs">修改貸款金額、利率或期數</p>
+                <h3 className="text-xl font-black">貸款細節修改</h3>
+                <p className="text-slate-400 text-xs">手動校正餘額或期數</p>
               </div>
               <button onClick={() => setShowSettingsModal(false)} className="text-white/60 hover:text-white transition-colors">
                 <i className="fas fa-times text-xl"></i>
@@ -466,33 +478,13 @@ const App: React.FC = () => {
             </div>
             <div className="p-8 space-y-6 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-8">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">帳戶名稱</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">目前餘額</label>
                 <input 
-                  type="text"
-                  value={editLoan.name}
-                  onChange={(e) => setEditLoan({...editLoan, name: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
+                  type="number"
+                  value={editLoan.currentBalance}
+                  onChange={(e) => setEditLoan({...editLoan, currentBalance: Number(e.target.value)})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold focus:ring-2 focus:ring-slate-400 outline-none"
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">原始額度</label>
-                  <input 
-                    type="number"
-                    value={editLoan.originalAmount}
-                    onChange={(e) => setEditLoan({...editLoan, originalAmount: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">目前餘額</label>
-                  <input 
-                    type="number"
-                    value={editLoan.currentBalance}
-                    onChange={(e) => setEditLoan({...editLoan, currentBalance: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
-                  />
-                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -501,7 +493,7 @@ const App: React.FC = () => {
                     type="number"
                     value={editLoan.paidInstallments}
                     onChange={(e) => setEditLoan({...editLoan, paidInstallments: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold focus:ring-2 focus:ring-slate-400 outline-none"
                   />
                 </div>
                 <div>
@@ -510,45 +502,15 @@ const App: React.FC = () => {
                     type="number"
                     value={editLoan.totalInstallments}
                     onChange={(e) => setEditLoan({...editLoan, totalInstallments: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold focus:ring-2 focus:ring-slate-400 outline-none"
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">年利率 (%)</label>
-                  <input 
-                    type="number"
-                    step="0.001"
-                    value={editLoan.interestRate}
-                    onChange={(e) => setEditLoan({...editLoan, interestRate: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">寬限期 (月)</label>
-                  <input 
-                    type="number"
-                    value={editLoan.gracePeriod}
-                    onChange={(e) => setEditLoan({...editLoan, gracePeriod: Number(e.target.value)})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">放款日期</label>
-                <input 
-                  type="date"
-                  value={editLoan.startDate}
-                  onChange={(e) => setEditLoan({...editLoan, startDate: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-slate-800 font-bold"
-                />
               </div>
               <button 
                 onClick={handleUpdateLoan}
                 className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-5 rounded-2xl mt-4 transition-all shadow-xl active:scale-95"
               >
-                儲存設定
+                儲存校正
               </button>
             </div>
           </div>
