@@ -26,9 +26,9 @@ const App: React.FC = () => {
     loans: [
       { id: 'loan-1', name: '一般房貸', type: LoanType.GENERAL_MORTGAGE, originalAmount: 3800000, currentBalance: 3800000, interestRate: 2.185, startDate: '2024-07-10', gracePeriod: 36, paidInstallments: 0, totalInstallments: 360, color: 'bg-blue-500' },
       { id: 'loan-2', name: '新青安房貸', type: LoanType.NEW_YOUTH_MORTGAGE, originalAmount: 10000000, currentBalance: 10000000, interestRate: 1.775, startDate: '2024-07-10', gracePeriod: 60, paidInstallments: 0, totalInstallments: 480, color: 'bg-emerald-500' },
-      { id: 'loan-3', name: '170信貸', type: LoanType.PERSONAL_LOAN_170, originalAmount: 1700000, currentBalance: 1700000, interestRate: 2.20, startDate: '2024-07-26', requestPeriod: 0, gracePeriod: 0, paidInstallments: 0, totalInstallments: 85, color: 'bg-indigo-500' },
+      { id: 'loan-3', name: '170信貸', type: LoanType.PERSONAL_LOAN_170, originalAmount: 1700000, currentBalance: 1700000, interestRate: 2.20, startDate: '2024-07-26', gracePeriod: 0, paidInstallments: 0, totalInstallments: 85, color: 'bg-indigo-500' },
       { id: 'loan-4', name: '20信貸', type: LoanType.PERSONAL_LOAN_20, originalAmount: 200000, currentBalance: 200000, interestRate: 2.23, startDate: '2025-02-11', gracePeriod: 0, paidInstallments: 0, totalInstallments: 84, color: 'bg-purple-500' }
-    ] as any, // Cast to any to handle type mismatch if any
+    ],
     payments: []
   };
 
@@ -94,34 +94,47 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('loan_tracker_data_v4', JSON.stringify(data));
-    // 如果已連結雲端，自動備份
     if (accessToken) {
       saveToDrive(data);
     }
-  }, [data]);
+  }, [data, accessToken]);
 
-  // 初始化 Google Identity Services
+  // 初始化 Google Identity Services (強化版)
   useEffect(() => {
-    // Fix: Using (window as any) to access the global google object attached by the external script.
-    if ((window as any).google) {
-      tokenClientRef.current = (window as any).google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: (resp: any) => {
-          if (resp.access_token) {
-            setAccessToken(resp.access_token);
-            fetchFromDrive(resp.access_token);
-          }
-        },
-      });
-    }
+    let checkInterval: number;
+    
+    const initGsi = () => {
+      const google = (window as any).google;
+      if (google && google.accounts && google.accounts.oauth2) {
+        console.log("Google SDK 載入成功，正在初始化 Token Client...");
+        tokenClientRef.current = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          callback: (resp: any) => {
+            if (resp.access_token) {
+              setAccessToken(resp.access_token);
+              fetchFromDrive(resp.access_token);
+            }
+          },
+        });
+        clearInterval(checkInterval);
+      }
+    };
+
+    // 每 500ms 檢查一次 SDK 是否就緒
+    checkInterval = window.setInterval(initGsi, 500);
+    
+    // 立即執行一次
+    initGsi();
+
+    return () => clearInterval(checkInterval);
   }, []);
 
   // --- Google Drive 核心函數 ---
 
   const handleConnectDrive = () => {
     if (!tokenClientRef.current) {
-      alert('Google SDK 尚未載入，請重新整理頁面');
+      alert('Google SDK 尚未載入完成，請稍候幾秒後再試一次。');
       return;
     }
     tokenClientRef.current.requestAccessToken();
@@ -130,7 +143,6 @@ const App: React.FC = () => {
   const fetchFromDrive = async (token: string) => {
     setIsSyncing(true);
     try {
-      // 搜尋 appDataFolder 中的備份檔案
       const listUrl = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='loan_backup.json'`;
       const listResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
       const listData = await listResp.json();
@@ -157,7 +169,6 @@ const App: React.FC = () => {
     if (!accessToken) return;
     setIsSyncing(true);
     try {
-      // 1. 搜尋現有檔案
       const listUrl = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='loan_backup.json'`;
       const listResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
       const listData = await listResp.json();
@@ -177,7 +188,6 @@ const App: React.FC = () => {
       let method = 'POST';
 
       if (listData.files && listData.files.length > 0) {
-        // 更新現有檔案
         uploadUrl = `https://www.googleapis.com/upload/drive/v3/files/${listData.files[0].id}?uploadType=media`;
         method = 'PATCH';
         await fetch(uploadUrl, {
@@ -186,7 +196,6 @@ const App: React.FC = () => {
           body: fileContent
         });
       } else {
-        // 建立新檔案
         await fetch(uploadUrl, {
           method,
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -275,7 +284,7 @@ const App: React.FC = () => {
           </div>
 
           <nav className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
-            <button onClick={() => setActiveTab('overview')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'overview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-50'}`}>資產概覽</button>
+            <button onClick={() => setActiveTab('overview')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'overview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>資產概覽</button>
             <button onClick={() => setActiveTab('reports')} className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'reports' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>還款報表</button>
           </nav>
           
@@ -298,7 +307,6 @@ const App: React.FC = () => {
 
         {activeTab === 'overview' ? (
           <div className="space-y-8 animate-in fade-in duration-500">
-            {/* 統計數值區 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-slate-900 rounded-3xl p-7 text-white shadow-2xl relative overflow-hidden group">
                 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">剩餘債務總額</p>
@@ -417,7 +425,6 @@ const App: React.FC = () => {
                 </>
               ) : (
                 <div className="space-y-6">
-                  {/* Google Drive Status Section */}
                   <div className={`p-6 rounded-3xl border-2 transition-all ${accessToken ? 'border-emerald-100 bg-emerald-50' : 'border-slate-100 bg-slate-50'}`}>
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-3">
