@@ -12,11 +12,10 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'reports'>('overview');
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [importJsonString, setImportJsonString] = useState('');
   
   // Google Drive 狀態
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(localStorage.getItem('gdrive_token'));
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const tokenClientRef = useRef<any>(null);
@@ -97,7 +96,7 @@ const App: React.FC = () => {
     if (accessToken) {
       saveToDrive(data);
     }
-  }, [data, accessToken]);
+  }, [data]);
 
   // 初始化 Google Identity Services (強化版)
   useEffect(() => {
@@ -106,27 +105,29 @@ const App: React.FC = () => {
     const initGsi = () => {
       const google = (window as any).google;
       if (google && google.accounts && google.accounts.oauth2) {
-        console.log("Google SDK 載入成功，正在初始化 Token Client...");
         tokenClientRef.current = google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: SCOPES,
           callback: (resp: any) => {
             if (resp.access_token) {
               setAccessToken(resp.access_token);
+              localStorage.setItem('gdrive_token', resp.access_token);
               fetchFromDrive(resp.access_token);
             }
           },
+          error_callback: (err: any) => {
+            console.error("GSI Error:", err);
+            if (err.type === 'token_failed') {
+              alert('授權失敗，請確認您已在 Google Cloud Console 將您的帳號加入「測試使用者」清單。');
+            }
+          }
         });
         clearInterval(checkInterval);
       }
     };
 
-    // 每 500ms 檢查一次 SDK 是否就緒
     checkInterval = window.setInterval(initGsi, 500);
-    
-    // 立即執行一次
     initGsi();
-
     return () => clearInterval(checkInterval);
   }, []);
 
@@ -134,10 +135,16 @@ const App: React.FC = () => {
 
   const handleConnectDrive = () => {
     if (!tokenClientRef.current) {
-      alert('Google SDK 尚未載入完成，請稍候幾秒後再試一次。');
+      alert('Google SDK 尚未載入完成，請稍候幾秒。');
       return;
     }
     tokenClientRef.current.requestAccessToken();
+  };
+
+  const handleDisconnectDrive = () => {
+    setAccessToken(null);
+    localStorage.removeItem('gdrive_token');
+    alert('已斷開雲端連結。資料仍保留在您的瀏覽器中。');
   };
 
   const fetchFromDrive = async (token: string) => {
@@ -151,8 +158,13 @@ const App: React.FC = () => {
         const fileId = listData.files[0].id;
         const getUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
         const getResp = await fetch(getUrl, { headers: { Authorization: `Bearer ${token}` } });
-        const cloudData = await getResp.json();
         
+        if (getResp.status === 401) {
+          handleDisconnectDrive();
+          return;
+        }
+
+        const cloudData = await getResp.json();
         if (confirm('偵測到雲端有較新的備份，是否下載並覆蓋本地資料？')) {
           setData(cloudData);
           setLastSyncTime(new Date().toLocaleTimeString());
@@ -171,13 +183,14 @@ const App: React.FC = () => {
     try {
       const listUrl = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='loan_backup.json'`;
       const listResp = await fetch(listUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
-      const listData = await listResp.json();
-
-      const metadata = {
-        name: 'loan_backup.json',
-        parents: ['appDataFolder']
-      };
       
+      if (listResp.status === 401) {
+        handleDisconnectDrive();
+        return;
+      }
+      
+      const listData = await listResp.json();
+      const metadata = { name: 'loan_backup.json', parents: ['appDataFolder'] };
       const fileContent = JSON.stringify(currentData);
       const file = new Blob([fileContent], { type: 'application/json' });
       const formData = new FormData();
@@ -440,17 +453,30 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     {accessToken ? (
-                      <button 
-                        onClick={() => saveToDrive(data)} 
-                        disabled={isSyncing}
-                        className="w-full bg-white text-emerald-600 border border-emerald-200 font-black py-4 rounded-2xl flex items-center justify-center hover:bg-emerald-100 transition-colors"
-                      >
-                        {isSyncing ? '同步中...' : '手動同步至雲端'}
-                      </button>
+                      <div className="space-y-2">
+                        <button 
+                          onClick={() => saveToDrive(data)} 
+                          disabled={isSyncing}
+                          className="w-full bg-white text-emerald-600 border border-emerald-200 font-black py-4 rounded-2xl flex items-center justify-center hover:bg-emerald-100 transition-colors"
+                        >
+                          {isSyncing ? '同步中...' : '手動同步至雲端'}
+                        </button>
+                        <button 
+                          onClick={handleDisconnectDrive}
+                          className="w-full text-slate-400 text-xs font-bold py-2 hover:text-red-500 transition-colors"
+                        >
+                          中斷 Google 連結
+                        </button>
+                      </div>
                     ) : (
-                      <button onClick={handleConnectDrive} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
-                        <i className="fab fa-google mr-2"></i> 連結 Google 帳號
-                      </button>
+                      <div className="space-y-3">
+                        <button onClick={handleConnectDrive} className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all">
+                          <i className="fab fa-google mr-2"></i> 連結 Google 帳號
+                        </button>
+                        <p className="text-[10px] text-slate-400 text-center font-medium leading-relaxed">
+                          提示：若登入時看到 403 錯誤，請在 Google Cloud 後台將您的 Email 加入「測試使用者」清單。
+                        </p>
+                      </div>
                     )}
                   </div>
 
