@@ -3,7 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 import { AppData } from "../types";
 
 export const analyzeDebtSituation = async (data: AppData): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Always use a named parameter and obtain the API key exclusively from the environment variable process.env.API_KEY.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const loanSummary = data.loans.map(l => 
     `- ${l.name} (${l.type}): 原始金額 ${l.originalAmount.toLocaleString()}, 目前餘額 ${l.currentBalance.toLocaleString()}, 年利率 ${l.interestRate}%, 放款日期 ${l.startDate}, 寬限期 ${l.gracePeriod}期, 已繳期數 ${l.paidInstallments}, 總共期數 ${l.totalInstallments}`
@@ -30,9 +31,11 @@ export const analyzeDebtSituation = async (data: AppData): Promise<string> => {
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      // Using gemini-3-pro-preview for complex reasoning and debt analysis tasks.
+      model: 'gemini-3-pro-preview',
       contents: prompt,
     });
+    // The GenerateContentResponse features a text property that directly returns the string output.
     return response.text || "無法取得 AI 分析結果。";
   } catch (error) {
     console.error("Gemini Error:", error);

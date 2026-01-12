@@ -11,7 +11,7 @@ export default defineConfig({
     port: 3000
   },
   define: {
-    // 確保 process.env.API_KEY 在前端可以被讀取
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
+    'process.env.GOOGLE_CLIENT_ID': JSON.stringify(process.env.GOOGLE_CLIENT_ID)
   }
 });
